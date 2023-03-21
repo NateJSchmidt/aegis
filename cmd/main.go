@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"fmt"
+	"github.com/schollz/progressbar"
 	"image"
 	"image/png"
 	"os"
@@ -28,7 +29,7 @@ func main() {
 	var lock sync.Mutex
 
 	// start up the timer loop
-	go timerLoop(quit, &lock)
+	// go timerLoop(quit, &lock)
 
 	fmt.Println("Starting main loop")
 	for {
@@ -38,7 +39,7 @@ func main() {
 
 		if foundBaddie {
 			playChime(&lock)
-			break
+			waitForEnterKey()
 		} else {
 			time.Sleep(1 * time.Second)
 		}
@@ -51,20 +52,32 @@ func main() {
 	// need to exit here to stop all goroutines
 }
 
+func waitForEnterKey() {
+	fmt.Println("Press the Enter Key to Resume")
+	fmt.Scanln()
+	fmt.Printf("Resuming Scanning\n")
+}
+
 func timerLoop(quit <-chan bool, lock *sync.Mutex) {
 	fmt.Println("Starting cycle timer noises")
+
+	bar := progressbar.New(90)
 
 	for {
 		// sleep first, then handle the signal and/or play noise
 		// time.Sleep((93600 - 1226) * 2 * time.Millisecond)
-		time.Sleep(3 * time.Second)
+		for i := 0; i <= 90; i = i + 5 {
+			bar.Add(5)
+			time.Sleep(5 * time.Second)
+		}
 
 		select {
 		case <-quit:
 			fmt.Println("Ending cycle timer noises")
 			return
 		default:
-			playChimes(lock)
+			bar.Reset()
+			//playChimes(lock)
 		}
 	}
 }
@@ -91,7 +104,7 @@ func checkPixels(img *image.RGBA) bool {
 				retval = true
 				break
 			} else {
-				// fmt.Println("Found nothing")
+				//fmt.Println("Found nothing")
 			}
 		}
 		if retval {
@@ -107,12 +120,12 @@ func captureScreen(lock *sync.Mutex) *image.RGBA {
 
 	for i := 0; i < n; i++ {
 		bounds := screenshot.GetDisplayBounds(i)
-		if bounds.Min.X < 0 {
+		if bounds.Min.X == 0 && bounds.Min.Y == 0 {
 			// img, err := screenshot.CaptureRect(bounds)
 
 			//when in 3 screen mode
 			//357,609 - 510, 1333
-			img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+357, bounds.Min.Y+609, bounds.Min.X+510, bounds.Min.Y+1333))
+			img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+590, bounds.Min.Y+1310, bounds.Min.X+711, bounds.Min.Y+925))
 
 			//when in 2 screen mode
 			//220,867 - 340,1367
@@ -140,18 +153,19 @@ func captureScreen(lock *sync.Mutex) *image.RGBA {
 
 func captureLeftScreen() {
 	n := screenshot.NumActiveDisplays()
+	fmt.Printf("Number of Active Displays: %d \n", n)
 	for i := 0; i < n; i++ {
 		bounds := screenshot.GetDisplayBounds(i)
-		if bounds.Min.X < 0 {
+		if bounds.Min.X == 0 && bounds.Min.Y == 0 {
 			// img, err := screenshot.CaptureRect(bounds)
 
 			//when in 3 screen mode
 			//357,609 - 510, 1333
-			img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+357, bounds.Min.Y+609, bounds.Min.X+510, bounds.Min.Y+1333))
+			img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+590, bounds.Min.Y+1310, bounds.Min.X+711, bounds.Min.Y+925))
 
 			//when in 2 screen mode
 			//220,867 - 340,1367
-			// img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+220, bounds.Min.Y+867, bounds.Min.X+340, bounds.Min.Y+1367))
+			//img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+220, bounds.Min.Y+867, bounds.Min.X+340, bounds.Min.Y+1367))
 			if err != nil {
 				fmt.Printf("Failure occurred: %s\n", err)
 				panic(err)
