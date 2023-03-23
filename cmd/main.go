@@ -182,7 +182,8 @@ func captureLeftScreen() {
 }
 
 func playChime(lock *sync.Mutex) {
-	f, err := audioFiles.Open("audio/chime-sound-7143.mp3")
+	//f, err := audioFiles.Open("audio/chime-sound-7143.mp3")
+	f, err := audioFiles.Open("audio/evac.mp3")
 	if err != nil {
 		fmt.Printf("Failure occurred: %s\n", err)
 		panic(err)
