@@ -9,6 +9,10 @@ import (
 	"sync"
 	"time"
 
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/widget"
 	"github.com/faiface/beep"
 	"github.com/faiface/beep/mp3"
 	"github.com/faiface/beep/speaker"
@@ -19,8 +23,16 @@ import (
 //go:embed audio/*
 var audioFiles embed.FS
 
+type uiControls struct {
+	threatScannerWidget *widget.Check
+	cycleTimerWidget    *widget.Slider
+	myApp               fyne.App
+}
+
 func main() {
 	fmt.Println("This program runs indefintely, ctrl+c to exit.")
+
+	ui := configureGUILayout()
 
 	captureLeftScreen()
 
@@ -31,6 +43,9 @@ func main() {
 	go timerLoop(quit, &lock)
 
 	fmt.Println("Starting main loop")
+	ui.myApp.Run()
+	panic("I'm done")
+	fmt.Println("I'm going!")
 	for {
 		img := captureScreen(&lock)
 
@@ -56,8 +71,8 @@ func timerLoop(quit <-chan bool, lock *sync.Mutex) {
 
 	for {
 		// sleep first, then handle the signal and/or play noise
-		// time.Sleep((93600 - 1226) * 2 * time.Millisecond)
-		time.Sleep(3 * time.Second)
+		time.Sleep((93600 - 1226) * 2 * time.Millisecond)
+		// time.Sleep(3 * time.Second)
 
 		select {
 		case <-quit:
@@ -111,8 +126,8 @@ func captureScreen(lock *sync.Mutex) *image.RGBA {
 			// img, err := screenshot.CaptureRect(bounds)
 
 			//when in 3 screen mode
-			//357,609 - 510, 1333
-			img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+357, bounds.Min.Y+609, bounds.Min.X+510, bounds.Min.Y+1333))
+			//330,581 - 510, 1333
+			img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+330, bounds.Min.Y+581, bounds.Min.X+510, bounds.Min.Y+1333))
 
 			//when in 2 screen mode
 			//220,867 - 340,1367
@@ -146,8 +161,8 @@ func captureLeftScreen() {
 			// img, err := screenshot.CaptureRect(bounds)
 
 			//when in 3 screen mode
-			//357,609 - 510, 1333
-			img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+357, bounds.Min.Y+609, bounds.Min.X+510, bounds.Min.Y+1333))
+			//330,581 - 510, 1333
+			img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+330, bounds.Min.Y+581, bounds.Min.X+510, bounds.Min.Y+1333))
 
 			//when in 2 screen mode
 			//220,867 - 340,1367
@@ -237,4 +252,44 @@ func playChimes(lock *sync.Mutex) {
 	done := make(chan bool)
 	speaker.Play(beep.Seq(streamer, beep.Callback(func() { done <- true })))
 	<-done
+}
+
+func toggle(newVal bool) {
+	fmt.Printf("Toggling %v\n", newVal)
+}
+
+func configureGUILayout() *uiControls {
+	fyneApp := app.New()
+	fyneWindow := fyneApp.NewWindow("Aegis")
+
+	// setup the controls
+	threatScannerWidget := widget.NewCheck("", toggle)
+	cycleTimerWidget := widget.NewSlider(0, 1)
+
+	// setup the labels
+	hLayout := container.NewHBox(
+		container.NewGridWithRows(3,
+			widget.NewLabel("Threat Scanner"),
+			widget.NewLabel("Cycle Timer"),
+			// widget.NewLabel("Place holder"),
+		),
+		container.NewGridWithRows(3,
+			threatScannerWidget,
+			cycleTimerWidget,
+			// widget.NewSlider(0, 1),
+		),
+	)
+	fyneWindow.SetContent(hLayout)
+
+	fyneWindow.Show()
+	fyneWindow.SetMaster()
+
+	// configure the retval value
+	retval := &uiControls{
+		threatScannerWidget: threatScannerWidget,
+		cycleTimerWidget:    cycleTimerWidget,
+		myApp:               fyneApp,
+	}
+
+	return retval
 }
