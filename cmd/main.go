@@ -148,13 +148,13 @@ func loadYAMLConfig() (yamlConfig YamlConfig) {
 }
 
 func waitForEnterKey() {
-	fmt.Println("Press the Enter Key to Resume")
+	fmt.Println("Press the Enter Key to Resume\n")
 	fmt.Scanln()
 	fmt.Printf("Resuming Scanning\n")
 }
 
 func timerLoop(quit <-chan bool, lock *sync.Mutex) {
-	fmt.Println("Starting cycle timer noises")
+	fmt.Println("Starting cycle timer noises\n")
 
 	bar := progressbar.New(90)
 
@@ -168,7 +168,7 @@ func timerLoop(quit <-chan bool, lock *sync.Mutex) {
 
 		select {
 		case <-quit:
-			fmt.Println("Ending cycle timer noises")
+			fmt.Println("Ending cycle timer noises\n")
 			return
 		default:
 			bar.Reset()
@@ -184,7 +184,7 @@ func checkPixels(img *image.RGBA, activeConfig ActiveConfig) bool {
 			color := img.RGBAAt(x, y)
 
 			if val, ok := activeConfig.ColorMatchMap[strconv.Itoa(int(color.R))+strconv.Itoa(int(color.G))+strconv.Itoa(int(color.B))]; ok {
-				fmt.Printf("Found: %s", val.MatchName)
+				fmt.Printf("Found: %s\n", val.MatchName)
 				retval = true
 				break
 			} else {
