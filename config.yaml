@@ -1,12 +1,16 @@
+QuickLoad: DjangoPC
 ScanConfigs:
-  Django:
-    Monitor: 0
+  DjangoPC:
+    BottomLeftX: 590
+    BottomLeftY: 1310
+    TopRightX: 625
+    TopRightY: 925
+  DjangoMac:
     BottomLeftX: 405
     BottomLeftY: 790
     TopRightX: 430
     TopRightY: 625
-  Scoops:
-    Monitor: 0
+  ScoopsMac:
     BottomLeftX: 250
     BottomLeftY: 800
     TopRightX: 265

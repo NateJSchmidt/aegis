@@ -26,12 +26,12 @@ import (
 var audioFiles embed.FS
 
 type YamlConfig struct {
+	QuickLoad    string                `yaml:"QuickLoad"`
 	ScanConfigs  map[string]ScanConfig `yaml:"ScanConfigs"`
 	ColorMatches []ColorMatch          `yaml:"ColorMatches"`
 }
 
 type ScanConfig struct {
-	Monitor     int `yaml:"Monitor"`
 	BottomLeftX int `yaml:"BottomLeftX"`
 	BottomLeftY int `yaml:"BottomLeftY"`
 	TopRightX   int `yaml:"TopRightX"`
@@ -101,26 +101,29 @@ func selectActiveConfig(yamlConfig YamlConfig) (activeConfig ActiveConfig) {
 		os.Exit(1)
 	}
 
-	fmt.Print("Select Config: ")
-	reader := bufio.NewReader(os.Stdin)
-	// ReadString will block until the delimiter is entered
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		fmt.Println("An error occured while reading input. Please try again", err)
-		return
+	if len(yamlConfig.QuickLoad) > 0 {
+		fmt.Printf("Quick Loading Profile: %s\n", yamlConfig.QuickLoad)
+		activeConfig.ScanConfig = yamlConfig.ScanConfigs[yamlConfig.QuickLoad]
+	} else {
+		fmt.Print("Select Config: ")
+		reader := bufio.NewReader(os.Stdin)
+		// ReadString will block until the delimiter is entered
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Println("An error occured while reading input. Please try again", err)
+			return
+		}
+
+		// remove the delimeter from the string
+		input = strings.TrimSpace(input)
+		fmt.Printf("Selected: %s\n", input)
+		activeConfig.ScanConfig = yamlConfig.ScanConfigs[input]
 	}
-
-	// remove the delimeter from the string
-	input = strings.TrimSuffix(input, "\n")
-	fmt.Printf("Selected: %s", input)
-
-	activeConfig.ScanConfig = yamlConfig.ScanConfigs[input]
 
 	activeConfig.ColorMatchMap = make(map[string]ColorMatch)
 	for i := 0; i < len(yamlConfig.ColorMatches); i++ {
 		colorMatch := yamlConfig.ColorMatches[i]
 		hash := colorMatch.hash()
-		fmt.Printf("Adding Hash: %s", hash)
 		activeConfig.ColorMatchMap[hash] = colorMatch
 	}
 
@@ -187,25 +190,6 @@ func checkPixels(img *image.RGBA, activeConfig ActiveConfig) bool {
 			} else {
 				// Found Nothing
 			}
-
-			//if color.R == 117 && color.G == 10 && color.B == 10 {
-			//	// color is red, play chime
-			//	fmt.Println("Found red")
-			//	retval = true
-			//	break
-			//} else if (color.R == 153 && color.G == 60 && color.B == 10) || (color.R == 132 && color.G == 67 && color.B == 33) || (color.R == 147 && color.G == 112 && color.B == 38) {
-			//	// color is orange play chime
-			//	fmt.Println("Found orange")
-			//	retval = true
-			//	break
-			//} else if color.R == 153 && color.G == 110 && color.B == 10 {
-			//	// color is yellow, play chime
-			//	fmt.Println("Found yellow")
-			//	retval = true
-			//	break
-			//} else {
-			//	//fmt.Println("Found nothing")
-			//}
 		}
 		if retval {
 			break
@@ -216,23 +200,21 @@ func checkPixels(img *image.RGBA, activeConfig ActiveConfig) bool {
 
 func captureScreen(lock *sync.Mutex, activeConfig ActiveConfig) *image.RGBA {
 	n := screenshot.NumActiveDisplays()
-	// fmt.Printf("Number of displays: %d\n", n)
+	captureRegion := image.Rect(
+		activeConfig.ScanConfig.BottomLeftX,
+		activeConfig.ScanConfig.BottomLeftY,
+		activeConfig.ScanConfig.TopRightX,
+		activeConfig.ScanConfig.TopRightY)
 
 	for i := 0; i < n; i++ {
 		bounds := screenshot.GetDisplayBounds(i)
-		if bounds.Min.X == 0 && bounds.Min.Y == 0 {
-			img, err := screenshot.CaptureRect(
-				image.Rect(
-					activeConfig.ScanConfig.BottomLeftX,
-					activeConfig.ScanConfig.BottomLeftY,
-					activeConfig.ScanConfig.TopRightX,
-					activeConfig.ScanConfig.TopRightY))
+		if captureRegion.In(bounds) {
+			img, err := screenshot.CaptureRect(captureRegion)
 			if err != nil {
 				fmt.Printf("Failure occurred: %s\n", err)
 				playCrashNoise(lock)
 				panic(err)
 			}
-
 			return img
 		}
 	}
@@ -241,16 +223,16 @@ func captureScreen(lock *sync.Mutex, activeConfig ActiveConfig) *image.RGBA {
 
 func captureLeftScreen(activeConfig *ActiveConfig) {
 	n := screenshot.NumActiveDisplays()
-	fmt.Printf("Number of Active Displays: %d \n", n)
+	captureRegion := image.Rect(
+		activeConfig.ScanConfig.BottomLeftX,
+		activeConfig.ScanConfig.BottomLeftY,
+		activeConfig.ScanConfig.TopRightX,
+		activeConfig.ScanConfig.TopRightY)
+
 	for i := 0; i < n; i++ {
 		bounds := screenshot.GetDisplayBounds(i)
-		if bounds.Min.X == 0 && bounds.Min.Y == 0 {
-			img, err := screenshot.CaptureRect(
-				image.Rect(
-					activeConfig.ScanConfig.BottomLeftX,
-					activeConfig.ScanConfig.BottomLeftY,
-					activeConfig.ScanConfig.TopRightX,
-					activeConfig.ScanConfig.TopRightY))
+		if captureRegion.In(bounds) {
+			img, err := screenshot.CaptureRect(captureRegion)
 			if err != nil {
 				fmt.Printf("Failure occurred: %s\n", err)
 				panic(err)
