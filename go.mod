@@ -6,6 +6,7 @@ require (
 	github.com/faiface/beep v1.1.0
 	github.com/kbinani/screenshot v0.0.0-20210720154843-7d3a670d8329
 	github.com/schollz/progressbar v1.0.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
