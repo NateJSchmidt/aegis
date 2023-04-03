@@ -25,3 +25,13 @@ There are a number of configs that are hard coded at the moment.  List is provid
 ### Windows
 
 In the top directory, run `go build -o aegis.exe cmd/main.go`.  Note that all of the audio files are compiled into the final executable.
+
+### Nate's Config
+
+#### 3 monitor
+
+(-2195, 569) to (-2020, 1309)
+
+#### 2 monitor
+
+(-2315, 1131) to (-2195, 1631)

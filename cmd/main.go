@@ -12,6 +12,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/widget"
 	"github.com/faiface/beep"
 	"github.com/faiface/beep/mp3"
@@ -24,9 +25,15 @@ import (
 var audioFiles embed.FS
 
 type uiControls struct {
-	threatScannerWidget *widget.Check
-	cycleTimerWidget    *widget.Slider
-	myApp               fyne.App
+	threatScannerWidget        *widget.Check
+	threatScannerLoopStatus    bool
+	threatScannerRunningStatus binding.Bool
+
+	cycleTimerWidget        *widget.Check
+	cycleTimerLoopStatus    bool
+	cycleTimerRunningStatus binding.Bool
+
+	myApp fyne.App
 }
 
 func main() {
@@ -36,50 +43,121 @@ func main() {
 
 	captureLeftScreen()
 
-	quit := make(chan bool)
+	cycleTimerQuitChannel := make(chan bool, 5)
+	threatScannerQuitChannel := make(chan bool, 5)
 	var lock sync.Mutex
 
-	// start up the timer loop
-	go timerLoop(quit, &lock)
-
-	fmt.Println("Starting main loop")
-	ui.myApp.Run()
-	panic("I'm done")
-	fmt.Println("I'm going!")
-	for {
-		img := captureScreen(&lock)
-
-		foundBaddie := checkPixels(img)
-
-		if foundBaddie {
-			playChime(&lock)
-			break
+	ui.cycleTimerRunningStatus.AddListener(binding.NewDataListener(func() {
+		drainChannel(cycleTimerQuitChannel)
+		value, err := ui.cycleTimerRunningStatus.Get()
+		if err != nil {
+			fmt.Printf("Error fetching the value from cycle timer status: %s\n", err)
+			playCrashNoise(&lock)
+			panic(err)
 		} else {
-			time.Sleep(1 * time.Second)
+			if value {
+				// if the check box was clicked to true, then start the go routine if not already active
+				if !ui.cycleTimerLoopStatus {
+					go timerLoop(cycleTimerQuitChannel, &lock, ui)
+				}
+
+				// if the loop is already active, then there is nothing to do
+
+			} else {
+				// if the check box was clicked to false, then stop the go routine
+				cycleTimerQuitChannel <- true
+			}
 		}
+	}))
 
-	}
+	ui.threatScannerRunningStatus.AddListener(binding.NewDataListener(func() {
+		drainChannel(threatScannerQuitChannel)
 
-	fmt.Println("Sending signal")
-	quit <- true
-	fmt.Println("Ending program")
-	// need to exit here to stop all goroutines
+		value, err := ui.threatScannerRunningStatus.Get()
+		fmt.Printf("threatScannerRunningStatus called with value of %v\n", value)
+		if err != nil {
+			fmt.Printf("Error fetching the value from threat scanner runner status: %s\n", err)
+			playCrashNoise(&lock)
+			panic(err)
+		} else {
+			if value {
+				// if the check box was clicked to true, then start the go routine if not already active
+				if !ui.threatScannerLoopStatus {
+					go threatScanLoop(threatScannerQuitChannel, &lock, ui)
+				}
+
+				// if the loop is already active, then there is nothing to do
+
+			} else {
+				// if the check box was clicked to false, then stop the go routine
+				threatScannerQuitChannel <- true
+			}
+		}
+	}))
+
+	ui.myApp.Run()
+	threatScannerQuitChannel <- true
+	cycleTimerQuitChannel <- true
 }
 
-func timerLoop(quit <-chan bool, lock *sync.Mutex) {
+func threatScanLoop(quit <-chan bool, lock *sync.Mutex, ui *uiControls) {
+	fmt.Println("Starting threat scanner")
+	ui.threatScannerLoopStatus = true
+
+	for {
+		select {
+		case <-quit:
+			fmt.Println("Threat scanner flipping off.")
+			ui.threatScannerLoopStatus = false
+			return
+		default:
+			img := captureScreen(lock)
+
+			foundBaddie := checkPixels(img)
+
+			if foundBaddie {
+				playChime(lock)
+
+				// this eventually kills this loop via the quit channel
+				ui.threatScannerRunningStatus.Set(false)
+				time.Sleep(1 * time.Second)
+			} else {
+				time.Sleep(1 * time.Second)
+			}
+		}
+	}
+}
+
+func timerLoop(quit <-chan bool, lock *sync.Mutex, ui *uiControls) {
 	fmt.Println("Starting cycle timer noises")
+	ui.cycleTimerLoopStatus = true
 
 	for {
 		// sleep first, then handle the signal and/or play noise
-		time.Sleep((93600 - 1226) * 2 * time.Millisecond)
-		// time.Sleep(3 * time.Second)
+		// time.Sleep((93600 - 1226) * 2 * time.Millisecond)
+		time.Sleep(3 * time.Second)
 
 		select {
 		case <-quit:
 			fmt.Println("Ending cycle timer noises")
+			ui.cycleTimerLoopStatus = false
 			return
 		default:
 			playChimes(lock)
+		}
+	}
+}
+
+func drainChannel(ch <-chan bool) {
+	fmt.Println("Starting to drain channel")
+	isNotEmpty := true
+	for isNotEmpty {
+		select {
+		case <-ch:
+			fmt.Println("\tFound a signal, clearing it...")
+		default:
+			fmt.Println("Channel drained")
+			isNotEmpty = false
 		}
 	}
 }
@@ -126,8 +204,8 @@ func captureScreen(lock *sync.Mutex) *image.RGBA {
 			// img, err := screenshot.CaptureRect(bounds)
 
 			//when in 3 screen mode
-			//330,581 - 510, 1333
-			img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+330, bounds.Min.Y+581, bounds.Min.X+510, bounds.Min.Y+1333))
+			//365,585 - 540, 1325
+			img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+365, bounds.Min.Y+585, bounds.Min.X+540, bounds.Min.Y+1325))
 
 			//when in 2 screen mode
 			//220,867 - 340,1367
@@ -161,12 +239,14 @@ func captureLeftScreen() {
 			// img, err := screenshot.CaptureRect(bounds)
 
 			//when in 3 screen mode
-			//330,581 - 510, 1333
-			img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+330, bounds.Min.Y+581, bounds.Min.X+510, bounds.Min.Y+1333))
+			//365,585 - 540, 1325
+			img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+365, bounds.Min.Y+585, bounds.Min.X+540, bounds.Min.Y+1325))
+			fmt.Printf("(%v, %v) to (%v, %v)\n", bounds.Min.X+365, bounds.Min.Y+585, bounds.Min.X+540, bounds.Min.Y+1325)
 
 			//when in 2 screen mode
-			//220,867 - 340,1367
-			// img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+220, bounds.Min.Y+867, bounds.Min.X+340, bounds.Min.Y+1367))
+			//245,870 - 365,1370
+			// img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+245, bounds.Min.Y+870, bounds.Min.X+365, bounds.Min.Y+1370))
+			// fmt.Printf("(%v, %v) to (%v, %v)\n", bounds.Min.X+245, bounds.Min.Y+870, bounds.Min.X+365, bounds.Min.Y+1370)
 			if err != nil {
 				fmt.Printf("Failure occurred: %s\n", err)
 				panic(err)
@@ -254,17 +334,24 @@ func playChimes(lock *sync.Mutex) {
 	<-done
 }
 
-func toggle(newVal bool) {
-	fmt.Printf("Toggling %v\n", newVal)
-}
-
 func configureGUILayout() *uiControls {
 	fyneApp := app.New()
 	fyneWindow := fyneApp.NewWindow("Aegis")
 
+	retval := &uiControls{
+		myApp:                      fyneApp,
+		threatScannerRunningStatus: binding.NewBool(),
+		threatScannerLoopStatus:    false,
+		cycleTimerRunningStatus:    binding.NewBool(),
+		cycleTimerLoopStatus:       false,
+	}
+
 	// setup the controls
-	threatScannerWidget := widget.NewCheck("", toggle)
-	cycleTimerWidget := widget.NewSlider(0, 1)
+	threatScannerWidget := widget.NewCheckWithData("", retval.threatScannerRunningStatus)
+	cycleTimerWidget := widget.NewCheckWithData("", retval.cycleTimerRunningStatus)
+
+	retval.threatScannerWidget = threatScannerWidget
+	retval.cycleTimerWidget = cycleTimerWidget
 
 	// setup the labels
 	hLayout := container.NewHBox(
@@ -283,13 +370,6 @@ func configureGUILayout() *uiControls {
 
 	fyneWindow.Show()
 	fyneWindow.SetMaster()
-
-	// configure the retval value
-	retval := &uiControls{
-		threatScannerWidget: threatScannerWidget,
-		cycleTimerWidget:    cycleTimerWidget,
-		myApp:               fyneApp,
-	}
 
 	return retval
 }
