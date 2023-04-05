@@ -13,6 +13,7 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	"github.com/faiface/beep"
 	"github.com/faiface/beep/mp3"
@@ -29,9 +30,10 @@ type uiControls struct {
 	threatScannerLoopStatus    bool
 	threatScannerRunningStatus binding.Bool
 
-	cycleTimerWidget        *widget.Check
-	cycleTimerLoopStatus    bool
-	cycleTimerRunningStatus binding.Bool
+	cycleTimerWidget            *widget.Check
+	cycleTimerLoopStatus        bool
+	cycleTimerRunningStatus     binding.Bool
+	cycleTimerProgressBarWidget *widget.ProgressBar
 
 	myApp fyne.App
 }
@@ -128,14 +130,31 @@ func threatScanLoop(quit <-chan bool, lock *sync.Mutex, ui *uiControls) {
 	}
 }
 
+func updateCycleTimeProgressBar(ui *uiControls, totalCycleTimeInDuration time.Duration) {
+	totalTime := int64(totalCycleTimeInDuration)
+	for i := int64(0); i < totalTime; i += int64(250 * time.Millisecond) {
+		ui.cycleTimerProgressBarWidget.SetValue(float64(i) / float64(totalTime))
+		time.Sleep(250 * time.Millisecond)
+		// fmt.Printf("Updating the progress bar with %v\n", float64(i)/float64(totalCycleTimeInMs))
+	}
+	ui.cycleTimerProgressBarWidget.SetValue(1.0)
+}
+
 func timerLoop(quit <-chan bool, lock *sync.Mutex, ui *uiControls) {
 	fmt.Println("Starting cycle timer noises")
 	ui.cycleTimerLoopStatus = true
 
+	// cycleTimeInDuration := (93200 - 1226) * 2 * time.Millisecond
+	cycleTimeInDuration := 3 * time.Second
+
 	for {
+
+		go updateCycleTimeProgressBar(ui, cycleTimeInDuration)
+
 		// sleep first, then handle the signal and/or play noise
-		// time.Sleep((93600 - 1226) * 2 * time.Millisecond)
-		time.Sleep(3 * time.Second)
+		time.Sleep(cycleTimeInDuration)
+		// time.Sleep(5 * time.Minute)
+		// time.Sleep(3 * time.Second)
 
 		select {
 		case <-quit:
@@ -241,7 +260,7 @@ func captureLeftScreen() {
 			//when in 3 screen mode
 			//365,585 - 540, 1325
 			img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+365, bounds.Min.Y+585, bounds.Min.X+540, bounds.Min.Y+1325))
-			fmt.Printf("(%v, %v) to (%v, %v)\n", bounds.Min.X+365, bounds.Min.Y+585, bounds.Min.X+540, bounds.Min.Y+1325)
+			// fmt.Printf("(%v, %v) to (%v, %v)\n", bounds.Min.X+365, bounds.Min.Y+585, bounds.Min.X+540, bounds.Min.Y+1325)
 
 			//when in 2 screen mode
 			//245,870 - 365,1370
@@ -339,11 +358,12 @@ func configureGUILayout() *uiControls {
 	fyneWindow := fyneApp.NewWindow("Aegis")
 
 	retval := &uiControls{
-		myApp:                      fyneApp,
-		threatScannerRunningStatus: binding.NewBool(),
-		threatScannerLoopStatus:    false,
-		cycleTimerRunningStatus:    binding.NewBool(),
-		cycleTimerLoopStatus:       false,
+		myApp:                       fyneApp,
+		threatScannerRunningStatus:  binding.NewBool(),
+		threatScannerLoopStatus:     false,
+		cycleTimerRunningStatus:     binding.NewBool(),
+		cycleTimerLoopStatus:        false,
+		cycleTimerProgressBarWidget: widget.NewProgressBar(),
 	}
 
 	// setup the controls
@@ -364,6 +384,10 @@ func configureGUILayout() *uiControls {
 			threatScannerWidget,
 			cycleTimerWidget,
 			// widget.NewSlider(0, 1),
+		),
+		container.NewGridWithRows(3,
+			layout.NewSpacer(),
+			retval.cycleTimerProgressBarWidget,
 		),
 	)
 	fyneWindow.SetContent(hLayout)
