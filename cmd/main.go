@@ -145,7 +145,13 @@ func timerLoop(quit <-chan bool, lock *sync.Mutex, ui *uiControls) {
 	ui.cycleTimerLoopStatus = true
 
 	// cycleTimeInDuration := (93200 - 1226) * 2 * time.Millisecond
-	cycleTimeInDuration := 3 * time.Second
+
+	//mercoxit in hulk
+	// cycleTimeInDuration := (87600 - 1226) * 2 * time.Millisecond
+
+	// cycleTimeInDuration := (42600 - 1226) * time.Millisecond
+	cycleTimeInDuration := 5 * time.Minute
+	// cycleTimeInDuration := 3 * time.Second
 
 	for {
 
@@ -153,8 +159,6 @@ func timerLoop(quit <-chan bool, lock *sync.Mutex, ui *uiControls) {
 
 		// sleep first, then handle the signal and/or play noise
 		time.Sleep(cycleTimeInDuration)
-		// time.Sleep(5 * time.Minute)
-		// time.Sleep(3 * time.Second)
 
 		select {
 		case <-quit:
