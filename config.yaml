@@ -1,0 +1,48 @@
+QuickLoad: EviesPC3Screen
+ScanConfigs:
+  EviesPC2Screen:
+    BottomLeftX: -2315
+    BottomLeftY: 1631
+    TopRightX: -2195
+    TopRightY: 1131
+  EviesPC3Screen:
+    BottomLeftX: -2195
+    BottomLeftY: 1345
+    TopRightX: -2020
+    TopRightY: 605
+  DjangoPC:
+    BottomLeftX: 590
+    BottomLeftY: 1310
+    TopRightX: 625
+    TopRightY: 925
+  DjangoMac:
+    BottomLeftX: 405
+    BottomLeftY: 790
+    TopRightX: 430
+    TopRightY: 625
+  ScoopsMac:
+    BottomLeftX: 250
+    BottomLeftY: 800
+    TopRightX: 265
+    TopRightY: 630
+ColorMatches:
+  - MatchName: red
+    R: 117
+    G: 10
+    B: 10
+  - MatchName: orange
+    R: 153
+    G: 60
+    B: 10
+  - MatchName: orange
+    R: 132
+    G: 67
+    B: 33
+  - MatchName: orange
+    R: 147
+    G: 112
+    B: 38
+  - MatchName: yellow
+    R: 153
+    G: 110
+    B: 10
