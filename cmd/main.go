@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"embed"
 	"fmt"
 	"image"
 	"image/png"
+	"log"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,10 +24,40 @@ import (
 	"github.com/faiface/beep/speaker"
 	"github.com/faiface/beep/wav"
 	"github.com/kbinani/screenshot"
+	"gopkg.in/yaml.v3"
 )
 
 //go:embed audio/*
 var audioFiles embed.FS
+
+type YamlConfig struct {
+	QuickLoad    string                `yaml:"QuickLoad"`
+	ScanConfigs  map[string]ScanConfig `yaml:"ScanConfigs"`
+	ColorMatches []ColorMatch          `yaml:"ColorMatches"`
+}
+
+type ScanConfig struct {
+	BottomLeftX int `yaml:"BottomLeftX"`
+	BottomLeftY int `yaml:"BottomLeftY"`
+	TopRightX   int `yaml:"TopRightX"`
+	TopRightY   int `yaml:"TopRightY"`
+}
+
+type ColorMatch struct {
+	MatchName string `yaml:"MatchName"`
+	R         int    `yaml:"R"`
+	G         int    `yaml:"G"`
+	B         int    `yaml:"B"`
+}
+
+func (cm ColorMatch) hash() string {
+	return strconv.Itoa(cm.R) + strconv.Itoa(cm.G) + strconv.Itoa(cm.B)
+}
+
+type ActiveConfig struct {
+	ScanConfig    ScanConfig
+	ColorMatchMap map[string]ColorMatch
+}
 
 type uiControls struct {
 	threatScannerWidget        *widget.Check
@@ -41,9 +75,11 @@ type uiControls struct {
 func main() {
 	fmt.Println("This program runs indefintely, ctrl+c to exit.")
 
+	activeConfig := setup()
+
 	ui := configureGUILayout()
 
-	captureLeftScreen()
+	saveScreenCapture(activeConfig)
 
 	cycleTimerQuitChannel := make(chan bool, 5)
 	threatScannerQuitChannel := make(chan bool, 5)
@@ -85,7 +121,7 @@ func main() {
 			if value {
 				// if the check box was clicked to true, then start the go routine if not already active
 				if !ui.threatScannerLoopStatus {
-					go threatScanLoop(threatScannerQuitChannel, &lock, ui)
+					go threatScanLoop(threatScannerQuitChannel, &lock, ui, activeConfig)
 				}
 
 				// if the loop is already active, then there is nothing to do
@@ -102,7 +138,67 @@ func main() {
 	cycleTimerQuitChannel <- true
 }
 
-func threatScanLoop(quit <-chan bool, lock *sync.Mutex, ui *uiControls) {
+func setup() (activeConfig ActiveConfig) {
+	yamlConfig := loadYAMLConfig()
+	activeConfig = selectActiveConfig(yamlConfig)
+	return activeConfig
+}
+
+func selectActiveConfig(yamlConfig YamlConfig) (activeConfig ActiveConfig) {
+	fmt.Printf("Selecting Active Configuration\n")
+
+	if len(yamlConfig.ScanConfigs) == 0 {
+		fmt.Printf("Missing Config Data")
+		os.Exit(1)
+	}
+
+	if len(yamlConfig.QuickLoad) > 0 {
+		fmt.Printf("Quick Loading Profile: %s\n", yamlConfig.QuickLoad)
+		activeConfig.ScanConfig = yamlConfig.ScanConfigs[yamlConfig.QuickLoad]
+	} else {
+		fmt.Print("Select Config: ")
+		reader := bufio.NewReader(os.Stdin)
+		// ReadString will block until the delimiter is entered
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Println("An error occured while reading input. Please try again", err)
+			return
+		}
+
+		// remove the delimeter from the string
+		input = strings.TrimSpace(input)
+		fmt.Printf("Selected: %s\n", input)
+		activeConfig.ScanConfig = yamlConfig.ScanConfigs[input]
+	}
+
+	activeConfig.ColorMatchMap = make(map[string]ColorMatch)
+	for i := 0; i < len(yamlConfig.ColorMatches); i++ {
+		colorMatch := yamlConfig.ColorMatches[i]
+		hash := colorMatch.hash()
+		activeConfig.ColorMatchMap[hash] = colorMatch
+	}
+
+	return activeConfig
+}
+
+func loadYAMLConfig() (yamlConfig YamlConfig) {
+	fmt.Printf("Loading Yaml Config\n")
+	yamlConfig = YamlConfig{}
+
+	yamlFile, err := os.ReadFile("config.yaml")
+	if err != nil {
+		log.Printf("yamlFile.Get err   #%v ", err)
+	}
+	err = yaml.Unmarshal(yamlFile, &yamlConfig)
+	if err != nil {
+		log.Fatalf("Unmarshal: %v", err)
+	}
+	fmt.Printf("%+v\n", yamlConfig)
+
+	return yamlConfig
+}
+
+func threatScanLoop(quit <-chan bool, lock *sync.Mutex, ui *uiControls, activeConfig ActiveConfig) {
 	fmt.Println("Starting threat scanner")
 	ui.threatScannerLoopStatus = true
 
@@ -113,9 +209,9 @@ func threatScanLoop(quit <-chan bool, lock *sync.Mutex, ui *uiControls) {
 			ui.threatScannerLoopStatus = false
 			return
 		default:
-			img := captureScreen(lock)
+			img := captureScreen(lock, activeConfig)
 
-			foundBaddie := checkPixels(img)
+			foundBaddie := checkPixels(img, activeConfig)
 
 			if foundBaddie {
 				playChime(lock)
@@ -185,11 +281,14 @@ func drainChannel(ch <-chan bool) {
 	}
 }
 
-func checkPixels(img *image.RGBA) bool {
+func checkPixels(img *image.RGBA, activeConfig ActiveConfig) bool {
 	retval := false
 	for x := img.Rect.Min.X; x <= img.Rect.Max.X; x++ {
 		for y := img.Rect.Min.Y; y <= img.Rect.Max.Y; y++ {
 			color := img.RGBAAt(x, y)
+
+			// if val, ok := activeConfig.ColorMatchMap[strconv.Itoa(int(color.R))+strconv.Itoa(int(color.G))+strconv.Itoa(int(color.B))]; ok {
+			// 	fmt.Printf("Found: %s\n", val.MatchName)
 
 			if color.R == 117 && color.G == 10 && color.B == 10 {
 				// color is red, play chime
@@ -206,8 +305,6 @@ func checkPixels(img *image.RGBA) bool {
 				fmt.Println("Found yellow")
 				retval = true
 				break
-			} else {
-				// fmt.Println("Found nothing")
 			}
 		}
 		if retval {
@@ -217,59 +314,46 @@ func checkPixels(img *image.RGBA) bool {
 	return retval
 }
 
-func captureScreen(lock *sync.Mutex) *image.RGBA {
+func captureScreen(lock *sync.Mutex, activeConfig ActiveConfig) *image.RGBA {
 	n := screenshot.NumActiveDisplays()
 	// fmt.Printf("Number of displays: %d\n", n)
 
+	captureRegion := image.Rect(
+		activeConfig.ScanConfig.BottomLeftX,
+		activeConfig.ScanConfig.BottomLeftY,
+		activeConfig.ScanConfig.TopRightX,
+		activeConfig.ScanConfig.TopRightY)
+
 	for i := 0; i < n; i++ {
 		bounds := screenshot.GetDisplayBounds(i)
-		if bounds.Min.X < 0 {
-			// img, err := screenshot.CaptureRect(bounds)
-
-			//when in 3 screen mode
-			//365,585 - 540, 1325
-			img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+365, bounds.Min.Y+585, bounds.Min.X+540, bounds.Min.Y+1325))
-
-			//when in 2 screen mode
-			//220,867 - 340,1367
-			// img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+220, bounds.Min.Y+867, bounds.Min.X+340, bounds.Min.Y+1367))
+		if captureRegion.In(bounds) {
+			img, err := screenshot.CaptureRect(captureRegion)
 			if err != nil {
 				fmt.Printf("Failure occurred: %s\n", err)
 				playCrashNoise(lock)
 				panic(err)
 			}
-
-			// filename := fmt.Sprintf("%d_%dx%d.png", i, bounds.Dx(), bounds.Dy())
-			// file, _ := os.Create(filename)
-			// defer file.Close()
-			// png.Encode(file, img)
-
-			// fmt.Printf("#%d : %v \"%s\"\n", i, bounds, filename)
-
-			// panic("arrrr")
-
 			return img
 		}
 	}
+
 	return nil
 }
 
-func captureLeftScreen() {
+func saveScreenCapture(activeConfig ActiveConfig) {
 	n := screenshot.NumActiveDisplays()
+	// fmt.Printf("Number of displays: %d\n", n)
+
+	captureRegion := image.Rect(
+		activeConfig.ScanConfig.BottomLeftX,
+		activeConfig.ScanConfig.BottomLeftY,
+		activeConfig.ScanConfig.TopRightX,
+		activeConfig.ScanConfig.TopRightY)
+
 	for i := 0; i < n; i++ {
 		bounds := screenshot.GetDisplayBounds(i)
-		if bounds.Min.X < 0 {
-			// img, err := screenshot.CaptureRect(bounds)
-
-			//when in 3 screen mode
-			//365,585 - 540, 1325
-			img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+365, bounds.Min.Y+585, bounds.Min.X+540, bounds.Min.Y+1325))
-			// fmt.Printf("(%v, %v) to (%v, %v)\n", bounds.Min.X+365, bounds.Min.Y+585, bounds.Min.X+540, bounds.Min.Y+1325)
-
-			//when in 2 screen mode
-			//245,870 - 365,1370
-			// img, err := screenshot.CaptureRect(image.Rect(bounds.Min.X+245, bounds.Min.Y+870, bounds.Min.X+365, bounds.Min.Y+1370))
-			// fmt.Printf("(%v, %v) to (%v, %v)\n", bounds.Min.X+245, bounds.Min.Y+870, bounds.Min.X+365, bounds.Min.Y+1370)
+		if captureRegion.In(bounds) {
+			img, err := screenshot.CaptureRect(captureRegion)
 			if err != nil {
 				fmt.Printf("Failure occurred: %s\n", err)
 				panic(err)
@@ -281,12 +365,13 @@ func captureLeftScreen() {
 			png.Encode(file, img)
 
 			fmt.Printf("#%d : %v \"%s\"\n", i, bounds, filename)
+
 		}
 	}
 }
 
 func playChime(lock *sync.Mutex) {
-	f, err := audioFiles.Open("audio/chime-sound-7143.mp3")
+	f, err := audioFiles.Open("audio/evac.mp3")
 	if err != nil {
 		fmt.Printf("Failure occurred: %s\n", err)
 		panic(err)
