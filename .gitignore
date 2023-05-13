@@ -1,2 +1,3 @@
 **/*.png
+!cmd/aegis.png
 **/*.exe
